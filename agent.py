@@ -2,60 +2,22 @@ import os
 import json
 import httpx
 from typing import AsyncGenerator
-from tools.sql_tools import get_database_schema, execute_sql_query
 from dotenv import load_dotenv
 
 load_dotenv()
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "granite4.2:3b")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL")
 
-TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_database_schema",
-            "description": "Returns the DDL/Schema structure of the requested tables. Use this before writing SQL to understand column names and relationships.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "tables": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of table names to retrieve the schema for. Leave empty to get all tables."
-                    }
-                }
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "execute_sql_query",
-            "description": "Executes a SQL query on the SQLite database. Only SELECT and INSERT are allowed.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The SQL query to execute."
-                    }
-                },
-                "required": ["query"]
-            }
-        }
-    }
-]
+if not OLLAMA_BASE_URL or not OLLAMA_MODEL:
+    raise ValueError("Please set OLLAMA_BASE_URL and OLLAMA_MODEL in your .env file")
 
-SYSTEM_PROMPT = """You are CSES Agent, an intelligent workflow assistant for a Life OS dashboard.
-Your goal is to help the user query their data, insert data, and analyze data.
-You have access to a local SQLite database.
-ALWAYS follow these steps when asked about data:
-1. If you don't know the schema, call `get_database_schema` to discover the exact table structures.
-2. Call `execute_sql_query` to read (SELECT) or write (INSERT) data. Do NOT use UPDATE or DELETE.
-3. If your SQL query fails (e.g. syntax error or foreign key error), read the error message, correct your SQL, and try again.
-4. Once you have the data, provide a clear, concise, and helpful Markdown response to the user.
-"""
+from prompts import SYSTEM_PROMPT
+from tools.registry import registry
+
+# Make sure tools are imported so they register themselves
+import tools.sql_tools
+import tools.basic_tools
 
 async def run_agent(history: list) -> AsyncGenerator[str, None]:
     # Ensure system prompt is first
@@ -68,7 +30,7 @@ async def run_agent(history: list) -> AsyncGenerator[str, None]:
             payload = {
                 "model": OLLAMA_MODEL,
                 "messages": messages,
-                "tools": TOOLS,
+                "tools": registry.get_schemas(),
                 "stream": False
             }
             
@@ -97,13 +59,7 @@ async def run_agent(history: list) -> AsyncGenerator[str, None]:
                         
                     yield f"event: tool_start\ndata: {json.dumps({'name': func_name, 'args': args})}\n\n"
                         
-                    result = ""
-                    if func_name == "get_database_schema":
-                        result = get_database_schema(args.get("tables"))
-                    elif func_name == "execute_sql_query":
-                        result = execute_sql_query(args.get("query"))
-                    else:
-                        result = f"Error: Unknown function {func_name}"
+                    result = registry.call_tool(func_name, args)
                         
                     # Truncate result for frontend display only, full result goes to model
                     display_result = str(result)

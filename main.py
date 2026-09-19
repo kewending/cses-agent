@@ -1,8 +1,15 @@
+import sys
+import asyncio
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from agent import run_agent
+from l1_generator import generate_l1_note_stream
 
 app = FastAPI(title="CSES Agent Harness")
 
@@ -26,6 +33,17 @@ async def chat_endpoint(req: ChatRequest):
     """
     print(req.messages)
     return StreamingResponse(run_agent(req.messages), media_type="text/event-stream")
+
+class L1NoteRequest(BaseModel):
+    url: str
+
+@app.post("/api/l1-note")
+async def l1_note_endpoint(req: L1NoteRequest):
+    """
+    Returns an SSE stream for generating an L1 Note from a URL.
+    """
+    print(f"Generating L1 Note for URL: {req.url}")
+    return StreamingResponse(generate_l1_note_stream(req.url), media_type="text/event-stream")
 
 if __name__ == "__main__":
     import uvicorn
