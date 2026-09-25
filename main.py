@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from agent import run_agent
-from l1_generator import generate_l1_note_stream
+from services.summary_service import generate_l1_note_stream
 
 app = FastAPI(title="CSES Agent Harness")
 
@@ -44,6 +44,50 @@ async def l1_note_endpoint(req: L1NoteRequest):
     """
     print(f"Generating L1 Note for URL: {req.url}")
     return StreamingResponse(generate_l1_note_stream(req.url), media_type="text/event-stream")
+
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi import BackgroundTasks
+
+# Serve reports directory for audio playback
+reports_dir = os.path.join(os.path.dirname(__file__), "reports")
+os.makedirs(reports_dir, exist_ok=True)
+app.mount("/reports", StaticFiles(directory=reports_dir), name="reports")
+
+@app.get("/api/daily-report")
+def get_daily_report():
+    """
+    Endpoint for the frontend to manually trigger or fetch today's daily report.
+    Returns the paths to the audio and script files.
+    """
+    from services.report_service import get_or_create_daily_report
+    result = get_or_create_daily_report()
+    if result.get("status") == "error":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=result.get("message"))
+    
+    # Return relative URLs for the frontend
+    filename = os.path.basename(result["audio_file"])
+    return {
+        "status": result["status"],
+        "audio_url": f"/reports/{filename}",
+        "script_url": f"/reports/{filename.replace('.wav', '.txt')}"
+    }
+
+class TTSRequest(BaseModel):
+    text: str
+    voice: str | None = None
+    speed: float = 1.0
+
+@app.post("/api/tts")
+async def tts_endpoint(req: TTSRequest):
+    from services.tts_service import generate_audio_async
+    b64_audio = await generate_audio_async(req.text, voice=req.voice, speed=req.speed)
+    if not b64_audio:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Could not generate audio")
+    return {"audio_base64": b64_audio}
+
 
 if __name__ == "__main__":
     import uvicorn

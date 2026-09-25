@@ -10,3 +10,5 @@ misaki[zh]
 langdetect
 torch
 crawl4ai
+feedparser
+tzdate

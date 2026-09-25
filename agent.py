@@ -19,7 +19,7 @@ from tools.registry import registry
 import tools.sql_tools
 import tools.basic_tools
 
-from tts_service import generate_audio_async
+from services.tts_service import generate_audio_async
 import asyncio
 import re
 

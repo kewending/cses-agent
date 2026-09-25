@@ -15,7 +15,7 @@ print("TTS Pipelines Initialized.")
 
 executor = ThreadPoolExecutor(max_workers=2)
 
-def generate_audio_chunk_sync(text: str):
+def generate_audio_chunk_sync(text: str, voice: str = None, speed: float = 1.0):
     text = text.strip()
     if not text:
         return None
@@ -28,12 +28,12 @@ def generate_audio_chunk_sync(text: str):
         
     if lang.startswith('zh'):
         pipeline = pipeline_zh
-        voice = 'zf_xiaoxiao'
+        chosen_voice = voice if voice else 'zf_xiaoxiao'
     else:
         pipeline = pipeline_en
-        voice = 'af_heart'
+        chosen_voice = voice if voice else 'af_heart'
         
-    generator = pipeline(text, voice=voice, speed=1.0, split_pattern=r'\n+')
+    generator = pipeline(text, voice=chosen_voice, speed=speed, split_pattern=r'\n+')
     
     # KPipeline yields (graphemes, phonemes, audio)
     all_audio = []
@@ -56,9 +56,11 @@ def generate_audio_chunk_sync(text: str):
     b64 = base64.b64encode(buffer.read()).decode('utf-8')
     return b64
 
-async def generate_audio_async(text: str):
+async def generate_audio_async(text: str, voice: str = None, speed: float = 1.0):
     """
     Non-blocking wrapper for TTS generation.
     """
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(executor, generate_audio_chunk_sync, text)
+    # Use a lambda to pass the kwargs correctly, or use partial
+    from functools import partial
+    return await loop.run_in_executor(executor, partial(generate_audio_chunk_sync, text, voice=voice, speed=speed))
