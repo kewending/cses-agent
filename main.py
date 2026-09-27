@@ -5,7 +5,7 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from agent import run_agent
@@ -33,6 +33,40 @@ async def chat_endpoint(req: ChatRequest):
     """
     print(req.messages)
     return StreamingResponse(run_agent(req.messages), media_type="text/event-stream")
+
+class ParentChatRequest(BaseModel):
+    messages: list[dict]
+    vocabulary: list = []
+
+@app.post("/api/parent-chat")
+async def parent_chat_endpoint(req: ParentChatRequest):
+    """
+    Returns an SSE stream for the AI Language Parent.
+    Events: delta (text tokens), audio (base64 TTS chunk), done
+    """
+    from services.parent_pipeline import run_parent_chat
+    return StreamingResponse(run_parent_chat(req.messages, req.vocabulary), media_type="text/event-stream")
+
+class DrillGenerateRequest(BaseModel):
+    vocabulary: list[str]
+    drill_type: str = "substitution"
+    count: int = 5
+
+@app.post("/api/drills/generate")
+async def generate_drills_endpoint(req: DrillGenerateRequest):
+    from services.drill_service import generate_drills_async
+    drills = await generate_drills_async(req.vocabulary, req.drill_type, req.count)
+    return JSONResponse(drills)
+
+class DynamicSentenceRequest(BaseModel):
+    word: str
+    meaning: str = ""
+
+@app.post("/api/playlist/generate-sentence")
+async def generate_dynamic_sentence_endpoint(req: DynamicSentenceRequest):
+    from services.playlist_service import generate_dynamic_sentence_async
+    sentence = await generate_dynamic_sentence_async(req.word, req.meaning)
+    return {"sentence": sentence}
 
 class L1NoteRequest(BaseModel):
     url: str
@@ -87,6 +121,19 @@ async def tts_endpoint(req: TTSRequest):
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Could not generate audio")
     return {"audio_base64": b64_audio}
+
+from fastapi import UploadFile, File
+
+@app.post("/api/asr")
+async def asr_endpoint(file: UploadFile = File(...)):
+    """
+    Receives an audio file (e.g. webm or wav) and transcribes it using Faster-Whisper.
+    """
+    from services.asr_service import transcribe_audio_bytes
+    audio_bytes = await file.read()
+    text = transcribe_audio_bytes(audio_bytes)
+    return {"text": text}
+
 
 
 if __name__ == "__main__":
