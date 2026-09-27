@@ -14,7 +14,7 @@ load_dotenv()
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 
-REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
+REPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
 def fetch_news() -> str:
