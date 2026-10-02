@@ -18,6 +18,7 @@ from tools.registry import registry
 # Make sure tools are imported so they register themselves
 import tools.sql_tools
 import tools.basic_tools
+import tools.project_tools
 
 from services.tts_service import generate_audio_async
 import asyncio

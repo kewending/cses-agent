@@ -4,10 +4,13 @@ import httpx
 from typing import AsyncGenerator
 import asyncio
 import re
+from dotenv import load_dotenv
 from services.tts_service import generate_audio_async
 
+load_dotenv()
+
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3") # Default to whatever the user uses
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 
 def build_parent_prompt(vocabulary: list) -> str:
     vocab_str = ", ".join([v.get('text', '') if isinstance(v, dict) else v for v in vocabulary])
